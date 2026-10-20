@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AUTO TOOL PRO 1000</string>
+
+    <string name="loading">Apertura del database…</string>
+    <string name="db_missing_title">Database non presente</string>
+    <string name="db_missing_body">L\'APK non contiene autotool.db. Copiare il file in app/src/main/assets/ e ricompilare.</string>
+    <string name="db_error_title">Errore di apertura del database</string>
+
+    <string name="back">Indietro</string>
+    <string name="info">Informazioni database</string>
+    <string name="search_hint">Cerca nel database (codice, modello, motore…)</string>
+    <string name="search">Cerca</string>
+    <string name="sections">Sezioni del database</string>
+    <string name="kind_table">Tabella</string>
+    <string name="kind_view">Vista</string>
+    <string name="kind_fts">Indice di ricerca</string>
+    <string name="rows_count">%1$d righe</string>
+
+    <string name="filter_hint">Filtra le righe</string>
+    <string name="apply">Applica</string>
+    <string name="shown_of_total">%1$d di %2$d righe</string>
+    <string name="load_more">Carica altre righe</string>
+    <string name="no_rows">Nessuna riga corrisponde al filtro.</string>
+
+    <string name="search_results">Risultati per «%1$s»</string>
+    <string name="no_results">Nessun risultato negli indici di ricerca.</string>
+    <string name="no_fts">Il database non contiene indici di ricerca FTS. Usare il filtro dentro le singole sezioni.</string>
+
+    <string name="empty_value">— vuoto</string>
+    <string name="source_db">Dal database</string>
+    <string name="row_detail">Dettaglio · %1$s</string>
+    <string name="read_only_note">Sola lettura. I valori sono mostrati così come sono nel database, con lo stato di verifica indicato nei campi dedicati.</string>
+
+    <string name="info_sqlite">Versione SQLite</string>
+    <string name="info_fts5">FTS5 disponibile</string>
+    <string name="info_json">JSON disponibile</string>
+    <string name="info_user_version">user_version</string>
+    <string name="info_size">Dimensione file</string>
+    <string name="info_sha256">SHA-256</string>
+    <string name="info_objects">Tabelle / viste / indici FTS</string>
+    <string name="info_app">Versione app</string>
+    <string name="yes">Sì</string>
+    <string name="no">No</string>
+    <string name="error_prefix">Errore: %1$s</string>
+</resources>

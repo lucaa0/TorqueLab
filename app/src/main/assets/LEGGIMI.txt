@@ -1,0 +1,4 @@
+Copiare qui il database tecnico con il nome esatto:  autotool.db
+
+Il file viene incluso nell'APK senza compressione e copiato così com'è
+nello storage privato dell'app al primo avvio (e dopo ogni aggiornamento dell'app).
