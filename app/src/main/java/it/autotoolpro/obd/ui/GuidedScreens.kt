@@ -1,5 +1,7 @@
 package it.autotoolpro.obd.ui
 
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -82,8 +84,9 @@ private fun SearchList(
 private fun ItemCard(onClick: () -> Unit, content: @Composable () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-    ) { Column(Modifier.padding(14.dp)) { content() } }
+    ) { Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { content() } }
 }
 
 // ------------------------------------------------------------------ veicoli
@@ -185,10 +188,11 @@ private fun Field(label: String, value: String?) {
 // ------------------------------------------------------------------ codici guasto
 
 fun severityColor(g: String?) = when (g) {
-    "alta" -> Color(0xFFFF6B6B)
-    "media" -> Color(0xFFFFB300)
-    "bassa" -> Color(0xFF7FD4A0)
-    else -> Color.Gray
+    // Stessi toni delle spie del tema (Theme.kt).
+    "alta" -> Color(0xFFFF6259)
+    "media" -> Color(0xFFFFB524)
+    "bassa" -> Color(0xFF63D69E)
+    else -> Color(0xFFA9B1BB)
 }
 
 @Composable
@@ -201,9 +205,14 @@ fun DtcsScreen(vm: AppViewModel, initial: String) = SearchList(
 @Composable
 fun DtcCard(code: String, description: String?, severity: String?, onClick: () -> Unit) {
     ItemCard(onClick) {
-        Row {
-            Text(code, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = severityColor(severity), style = MaterialTheme.typography.titleMedium)
-            if (severity != null) Text("  · gravità $severity", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(code, style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = TabularNums),
+                color = severityColor(severity), modifier = Modifier.weight(1f))
+            if (severity != null) Surface(shape = MaterialTheme.shapes.small, color = severityColor(severity).copy(alpha = 0.14f),
+                contentColor = severityColor(severity)) {
+                Text("gravità $severity", style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+            }
         }
         Text(description ?: "Non presente nel database", style = MaterialTheme.typography.bodyMedium)
     }

@@ -5,8 +5,10 @@
 - Creazione e salvataggio del rapporto OBD.
 - Prototipo Ford con PATS e odometro simulati, esiti di prova e annullamento.
 
-APK: AutoToolPro_storico_2026-10-20.apk, nella cartella app diego
-(SHA256 6530606e5233276d3f7d8ba6becb9879b7c425d17e8a767ba39869455a01c1b3).
+APK: AutoToolPro_cruscotto_2026-10-20.apk, nella cartella app diego
+(SHA256 675ec1d5b3315fa7dbd9a99e09a7ff5378d51a746a4efec7e065590d134bb55c).
+Interfaccia «cruscotto»: tema scuro ad alto contrasto, spie colorate, valori live
+in quadranti con cifre condensate, icone Material. Non ancora vista su telefono.
 Compilazione e controlli Android superati; firma APK verificata.
 PATS e odometro usano dati fittizi. Prove su telefono e veicoli da eseguire.
 
