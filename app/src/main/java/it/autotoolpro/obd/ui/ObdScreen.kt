@@ -106,6 +106,9 @@ fun ObdScreen(vm: AppViewModel) {
                 }
             }
             vm.reportSaveMessage?.let { Text(it) }
+            OutlinedButton(onClick = { vm.push(Screen.History) }, enabled = !vm.obdBusy, modifier = Modifier.fillMaxWidth()) {
+                Text("Storico letture (${vm.readings.size})")
+            }
         }
     }
 }
@@ -140,7 +143,6 @@ private fun DevicePicker(vm: AppViewModel, devices: List<BluetoothDevice>) {
 @Composable
 private fun Connected(vm: AppViewModel) {
     LaunchedEffect(vm.obdDevice) { vm.pollLive() }
-    var reportVehicle by rememberSaveable { mutableStateOf<String?>(null) }
 
     Text("● Collegato a ${vm.obdDevice}", color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
     if (!vm.obdGenericSupported) Hint("La diagnosi OBD generica non è confermata. Puoi comunque raccogliere le risposte dell'adattatore e dell'auto nel rapporto.")
@@ -154,6 +156,15 @@ private fun Connected(vm: AppViewModel) {
         }
     }
 
+    Text("Auto collegata", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    Hint("Indicala tu: serve per il rapporto e per confrontare le letture nello storico.")
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        FordCore.vehicles.forEach { vehicle ->
+            FilterChip(selected = vm.selectedVehicle == vehicle.id, enabled = !vm.obdBusy,
+                onClick = { vm.selectedVehicle = vehicle.id }, label = { Text("${vehicle.name} ${vehicle.year}") })
+        }
+    }
+
     Button(onClick = { vm.readCodes() }, enabled = !vm.obdBusy && vm.obdGenericSupported, modifier = Modifier.fillMaxWidth()) {
         Text(if (vm.obdBusy) "Lettura in corso…" else "Leggi codici e stato")
     }
@@ -163,18 +174,14 @@ private fun Connected(vm: AppViewModel) {
     vm.storedCodes?.let { CodeList(vm, "Codici memorizzati", it) }
     vm.pendingCodes?.let { CodeList(vm, "Codici in attesa", it) }
     if (vm.freezeFrameRead) FreezeFrame(vm.freezeFrame)
+    vm.historyMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     Hint("La cancellazione dei codici non è prevista: serve prima capire e risolvere il guasto.")
 
     Text("Identifica adattatore e auto", style = MaterialTheme.typography.titleMedium)
-    Hint("Scegli l'auto collegata e crea un rapporto con le informazioni disponibili. Non modifica chiavi o chilometraggio.")
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        FordCore.vehicles.forEach { vehicle ->
-            FilterChip(selected = reportVehicle == vehicle.id, enabled = !vm.obdBusy,
-                onClick = { reportVehicle = vehicle.id }, label = { Text("${vehicle.name} ${vehicle.year}") })
-        }
-    }
-    OutlinedButton(onClick = { reportVehicle?.let { vm.collectReport(it) } },
-        enabled = !vm.obdBusy && reportVehicle != null, modifier = Modifier.fillMaxWidth()) {
+    Hint(if (vm.selectedVehicle == null) "Indica prima l'auto collegata, qui sopra."
+        else "Crea un rapporto con le informazioni disponibili. Non modifica chiavi o chilometraggio.")
+    OutlinedButton(onClick = { vm.selectedVehicle?.let { vm.collectReport(it) } },
+        enabled = !vm.obdBusy && vm.selectedVehicle != null, modifier = Modifier.fillMaxWidth()) {
         Text("Crea rapporto di identificazione")
     }
 

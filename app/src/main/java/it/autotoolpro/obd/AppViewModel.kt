@@ -13,6 +13,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import it.autotoolpro.obd.data.DbObject
 import it.autotoolpro.obd.data.OpenResult
+import it.autotoolpro.obd.data.Reading
+import it.autotoolpro.obd.data.ReadingHistory
 import it.autotoolpro.obd.data.TechDatabase
 import it.autotoolpro.obd.obd.Elm327
 import it.autotoolpro.obd.obd.ObdData
@@ -21,6 +23,7 @@ import it.autotoolpro.obd.ford.FordCore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -35,6 +38,7 @@ sealed interface Screen {
     data class Dtcs(val query: String = "") : Screen
     data class Dtc(val code: String) : Screen
     data object Obd : Screen
+    data object History : Screen
     data object Database : Screen
     data class Table(val obj: DbObject) : Screen
     data class Search(val query: String) : Screen
@@ -68,6 +72,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var freezeFrame by mutableStateOf<Pair<String, Map<String, String>>?>(null); private set
     var freezeFrameRead by mutableStateOf(false); private set
 
+    // ---- Storico letture (file privato dell'app)
+    private val history = ReadingHistory(File(app.filesDir, "storico_letture.txt"))
+    var readings by mutableStateOf<List<Reading>>(emptyList()); private set
+    /** Auto indicata dall'utente per rapporto e storico: un'etichetta, non riconoscimento VIN. */
+    var selectedVehicle by mutableStateOf<String?>(null)
+    var historyMessage by mutableStateOf<String?>(null); private set
+
     /** Etichette dei valori live da mostrare, nell'ordine di [ObdData.livePids]. */
     val liveLabels: List<String>
         get() {
@@ -77,6 +88,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { openResult = db.open() }
+        viewModelScope.launch {
+            readings = runCatching { withContext(Dispatchers.IO) { history.load() } }.getOrDefault(emptyList())
+        }
     }
 
     fun push(screen: Screen) {
@@ -124,6 +138,46 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         pendingCodes = elm.readDtcs(pending = true)
         freezeFrame = elm.freezeFrame()
         freezeFrameRead = true
+        saveReading()
+    }
+
+    private suspend fun saveReading() {
+        val vehicle = FordCore.vehicles.firstOrNull { it.id == selectedVehicle }
+            ?.let { "${it.name} ${it.year}" } ?: "Auto non indicata"
+        val reading = Reading(
+            timestamp = System.currentTimeMillis(),
+            vehicle = vehicle,
+            device = obdDevice ?: "",
+            milOn = obdStatus?.milOn,
+            stored = storedCodes.orEmpty(),
+            pending = pendingCodes.orEmpty(),
+            incompleteMonitors = obdStatus?.monitors.orEmpty().filter { !it.complete }.map { it.name },
+            counters = distances.orEmpty(),
+            freezeFrameCode = freezeFrame?.first,
+        )
+        // Un errore di scrittura non deve far perdere la lettura appena mostrata.
+        historyMessage = try {
+            readings = withContext(Dispatchers.IO) { history.add(reading) }
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            "Lettura non salvata nello storico: ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            historyMessage = try {
+                withContext(Dispatchers.IO) { history.clear() }
+                readings = emptyList()
+                null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "Storico non cancellato: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
     }
 
     fun collectReport(vehicleId: String) = launchObd {

@@ -37,6 +37,7 @@ private fun Navigator(vm: AppViewModel) {
         is Screen.Dtcs -> DtcsScreen(vm, screen.query)
         is Screen.Dtc -> DtcScreen(vm, screen.code)
         Screen.Obd -> ObdScreen(vm)
+        Screen.History -> HistoryScreen(vm)
         Screen.Database -> DatabaseScreen(vm)
         Screen.Info -> InfoScreen(vm)
         is Screen.Table -> TableScreen(vm, screen.obj)
