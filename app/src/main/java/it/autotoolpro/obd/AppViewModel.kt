@@ -15,6 +15,7 @@ import it.autotoolpro.obd.data.DbObject
 import it.autotoolpro.obd.data.OpenResult
 import it.autotoolpro.obd.data.TechDatabase
 import it.autotoolpro.obd.obd.Elm327
+import it.autotoolpro.obd.obd.ObdData
 import it.autotoolpro.obd.obd.ObdReport
 import it.autotoolpro.obd.ford.FordCore
 import kotlinx.coroutines.CancellationException
@@ -60,6 +61,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var obdReport by mutableStateOf<ObdReport?>(null); private set
     var reportSaveMessage by mutableStateOf<String?>(null); private set
     val live = mutableStateMapOf<String, String>()
+    /** PID mode 01 dichiarati dall'auto; null finché non letti (si usa [ObdData.defaultLive]). */
+    var supportedPids by mutableStateOf<Set<String>?>(null); private set
+    var obdStatus by mutableStateOf<ObdData.Status?>(null); private set
+    var distances by mutableStateOf<List<Pair<String, String>>?>(null); private set
+    var freezeFrame by mutableStateOf<Pair<String, Map<String, String>>?>(null); private set
+    var freezeFrameRead by mutableStateOf(false); private set
+
+    /** Etichette dei valori live da mostrare, nell'ordine di [ObdData.livePids]. */
+    val liveLabels: List<String>
+        get() {
+            val pids = supportedPids ?: ObdData.defaultLive
+            return ObdData.livePids.filter { it.pid in pids || it.pid == "42" }.map { it.label }
+        }
 
     init {
         viewModelScope.launch { openResult = db.open() }
@@ -78,20 +92,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         obdDevice = null
         obdGenericSupported = false
         obdReport = null; reportSaveMessage = null
+        clearReadings()
         obdGenericSupported = elm.connect(device)
         obdDevice = device.name ?: device.address
-        storedCodes = null; pendingCodes = null; live.clear()
+        if (obdGenericSupported) supportedPids = elm.supportedPids().takeIf { it.isNotEmpty() }
     }
 
     fun disconnect() {
         elm.close()
         obdGenericSupported = false
-        obdDevice = null; storedCodes = null; pendingCodes = null; live.clear()
+        obdDevice = null
+        clearReadings()
     }
 
+    private fun clearReadings() {
+        storedCodes = null; pendingCodes = null; live.clear()
+        supportedPids = null; obdStatus = null; distances = null
+        freezeFrame = null; freezeFrameRead = false
+    }
+
+    /** Controllo completo in sola lettura: stato spia e monitor, contatori, codici, freeze frame. */
     fun readCodes() = launchObd {
+        obdStatus = elm.mode01("01")?.let(ObdData::status)
+        distances = buildList {
+            ObdData.word(elm.mode01("21"))?.let { add("Km percorsi con spia accesa" to "$it km") }
+            ObdData.word(elm.mode01("31"))?.let { add("Km dalla cancellazione dei codici" to "$it km") }
+            elm.mode01("30")?.firstOrNull()?.let { add("Avviamenti a caldo dalla cancellazione" to "$it") }
+            ObdData.word(elm.mode01("4E"))?.let { add("Minuti motore dalla cancellazione" to "$it min") }
+        }
         storedCodes = elm.readDtcs(pending = false)
         pendingCodes = elm.readDtcs(pending = true)
+        freezeFrame = elm.freezeFrame()
+        freezeFrameRead = true
     }
 
     fun collectReport(vehicleId: String) = launchObd {
@@ -124,12 +156,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun pollLive() {
         while (obdDevice != null) {
             if (!obdBusy && obdGenericSupported) try {
-                elm.pid("0C")?.let { (a, b) -> live["Giri motore"] = "${(a * 256 + b) / 4} giri/min" }
-                elm.pid("0D")?.let { (a, _) -> live["Velocità"] = "$a km/h" }
-                elm.pid("05")?.let { (a, _) -> live["Temp. liquido"] = "${a - 40} °C" }
-                elm.pid("04")?.let { (a, _) -> live["Carico motore"] = "${a * 100 / 255} %" }
-                val volts = elm.pid("42")?.let { (a, b) -> (a * 256 + b) / 1000.0 } ?: elm.adapterVoltage()
-                volts?.let { live["Tensione"] = "%.1f V".format(it) }
+                val pids = supportedPids ?: ObdData.defaultLive
+                for (p in ObdData.livePids) {
+                    if (obdBusy) break
+                    val value = if (p.pid in pids) elm.mode01(p.pid)?.let(p.decode) else null
+                    // Tensione: PID 42 se supportato, altrimenti misurata dall'adattatore.
+                    val shown = value ?: if (p.pid == "42") elm.adapterVoltage()?.let { "%.1f V".format(it) } else null
+                    if (shown != null) live[p.label] = shown else live.remove(p.label)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

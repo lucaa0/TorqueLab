@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import it.autotoolpro.obd.AppViewModel
 import it.autotoolpro.obd.Screen
 import it.autotoolpro.obd.ford.FordCore
+import it.autotoolpro.obd.obd.ObdData
 
 private fun needsPermission() = Build.VERSION.SDK_INT >= 31
 
@@ -144,7 +145,8 @@ private fun Connected(vm: AppViewModel) {
     Text("● Collegato a ${vm.obdDevice}", color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
     if (!vm.obdGenericSupported) Hint("La diagnosi OBD generica non è confermata. Puoi comunque raccogliere le risposte dell'adattatore e dell'auto nel rapporto.")
 
-    val keys = listOf("Giri motore", "Velocità", "Temp. liquido", "Carico motore", "Tensione")
+    val keys = vm.liveLabels
+    if (vm.supportedPids != null) Hint("Sono mostrati solo i valori che l'auto dichiara di fornire (${keys.size}).")
     keys.chunked(2).forEach { pair ->
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             pair.forEach { k -> LiveTile(k, vm.live[k] ?: "—", Modifier.weight(1f)) }
@@ -153,11 +155,14 @@ private fun Connected(vm: AppViewModel) {
     }
 
     Button(onClick = { vm.readCodes() }, enabled = !vm.obdBusy && vm.obdGenericSupported, modifier = Modifier.fillMaxWidth()) {
-        Text(if (vm.obdBusy) "Lettura in corso…" else "Leggi codici guasto")
+        Text(if (vm.obdBusy) "Lettura in corso…" else "Leggi codici e stato")
     }
 
+    vm.obdStatus?.let { StatusCard(it) }
+    vm.distances?.let { Distances(it) }
     vm.storedCodes?.let { CodeList(vm, "Codici memorizzati", it) }
     vm.pendingCodes?.let { CodeList(vm, "Codici in attesa", it) }
+    if (vm.freezeFrameRead) FreezeFrame(vm.freezeFrame)
     Hint("La cancellazione dei codici non è prevista: serve prima capire e risolvere il guasto.")
 
     Text("Identifica adattatore e auto", style = MaterialTheme.typography.titleMedium)
@@ -198,5 +203,59 @@ private fun CodeList(vm: AppViewModel, title: String, codes: List<String>) {
             }.getOrNull()
         }
         DtcCard(code, info?.getOrNull(0), info?.getOrNull(1)) { vm.push(Screen.Dtc(code)) }
+    }
+}
+
+@Composable
+private fun InfoCard(content: @Composable () -> Unit) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { content() }
+    }
+}
+
+@Composable
+private fun StatusCard(status: ObdData.Status) {
+    Text("Stato e prontezza", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    InfoCard {
+        Text(
+            if (status.milOn) "Spia motore ACCESA" else "Spia motore spenta",
+            fontWeight = FontWeight.Bold,
+            color = if (status.milOn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+        )
+        Text("Codici che accendono la spia: ${status.dtcCount}")
+        Text(if (status.diesel) "Motore: diesel (accensione per compressione)" else "Motore: benzina (accensione comandata)",
+            style = MaterialTheme.typography.bodySmall)
+        if (status.monitors.isEmpty()) Hint("Nessun monitor dichiarato dall'auto.")
+        status.monitors.forEach { m ->
+            Text("${if (m.complete) "✓" else "…"} ${m.name}: ${if (m.complete) "completato" else "non completato"}",
+                color = if (m.complete) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        val pending = status.monitors.count { !it.complete }
+        if (pending > 0) Hint("$pending monitor non completati: succede dopo una cancellazione dei codici o lo stacco della batteria. " +
+            "Di solito si completano con qualche giorno di guida normale.")
+    }
+}
+
+@Composable
+private fun Distances(items: List<Pair<String, String>>) {
+    if (items.isEmpty()) return
+    Text("Contatori", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    InfoCard {
+        items.forEach { (label, value) -> Text("$label: $value") }
+        Hint("Valori registrati dalla centralina motore, non dal contachilometri. Pochi km dalla cancellazione indicano che i codici sono stati cancellati di recente.")
+    }
+}
+
+@Composable
+private fun FreezeFrame(frame: Pair<String, Map<String, String>>?) {
+    Text("Freeze frame", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    if (frame == null) {
+        Hint("Nessun freeze frame memorizzato.")
+        return
+    }
+    InfoCard {
+        Text("Valori registrati quando è comparso ${frame.first}", fontWeight = FontWeight.Bold)
+        if (frame.second.isEmpty()) Hint("L'auto non fornisce i valori del freeze frame.")
+        frame.second.forEach { (label, value) -> Text("$label: $value") }
     }
 }

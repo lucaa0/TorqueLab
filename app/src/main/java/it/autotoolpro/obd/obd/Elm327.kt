@@ -90,8 +90,43 @@ class Elm327 {
 
     /** Tensione misurata dall'adattatore (ATRV): funziona anche se l'auto non supporta il PID 42. */
     // keepErrors: un "?" da un clone senza ATRV non deve chiudere il collegamento.
-    suspend fun adapterVoltage(): Double? =
-        parseVoltage(lock.withLock { exchange("ATRV", 2000, keepErrors = true) })
+    suspend fun adapterVoltage(): Double? = parseVoltage(query("ATRV", 2000))
+
+    /**
+     * Lettura tollerante: NO DATA, "?" o errori di bus diventano null invece di chiudere
+     * il collegamento. Le eccezioni di I/O chiudono comunque, come in [send].
+     */
+    private suspend fun query(cmd: String, timeoutMs: Long = 2500): List<String> =
+        lock.withLock { exchange(cmd, timeoutMs, keepErrors = true) }
+
+    /** Byte di dati di un PID mode 01, o null se l'auto non risponde. */
+    suspend fun mode01(pid: String): List<Int>? = ObdData.dataBytes(query("01$pid"), "41$pid")
+
+    /** PID mode 01 dichiarati dall'auto (0100, poi 0120/0140 se annunciati). */
+    suspend fun supportedPids(): Set<String> {
+        val all = mutableSetOf<String>()
+        for (base in listOf(0x00, 0x20, 0x40)) {
+            val pid = "%02X".format(base)
+            if (base > 0 && pid !in all) break
+            all += ObdData.supportedPids(query("01$pid", 4000), "41$pid", base)
+        }
+        return all
+    }
+
+    /** Freeze frame 00: codice che l'ha generato e valori registrati, o null se assente. */
+    suspend fun freezeFrame(): Pair<String, Map<String, String>>? {
+        val code = ObdData.dataBytes(query("020200"), "4202", skip = 1)?.take(2)
+            ?.takeIf { it.size == 2 && (it[0] or it[1]) != 0 }
+            ?.let { decodeDtc("%02X%02X".format(it[0], it[1])) } ?: return null
+        val supported = ObdData.supportedPids(query("020000"), "4200", 0, skip = 1)
+        val values = linkedMapOf<String, String>()
+        for (p in ObdData.livePids) {
+            if (p.pid !in supported) continue
+            ObdData.dataBytes(query("02${p.pid}00"), "42${p.pid}", skip = 1)
+                ?.let(p.decode)?.let { values[p.label] = it }
+        }
+        return code to values
+    }
 
     companion object {
         private val SPP: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
@@ -112,12 +147,8 @@ class Elm327 {
         }
 
         fun parsePid(raw: List<String>, pid: String): Pair<Int, Int>? {
-            val line = raw.joinToString("").replace(" ", "")
-            val at = line.indexOf("41$pid")
-            if (at < 0) return null
-            val d = line.substring(at + 4)
-            val a = d.take(2).toIntOrNull(16) ?: return null
-            return a to (d.drop(2).take(2).toIntOrNull(16) ?: 0)
+            val d = ObdData.dataBytes(raw, "41$pid")?.takeIf { it.isNotEmpty() } ?: return null
+            return d[0] to (d.getOrNull(1) ?: 0)
         }
 
         /** "12.4V" → 12.4; null se la risposta non è una tensione. */
