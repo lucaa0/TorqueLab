@@ -128,7 +128,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 elm.pid("0D")?.let { (a, _) -> live["Velocità"] = "$a km/h" }
                 elm.pid("05")?.let { (a, _) -> live["Temp. liquido"] = "${a - 40} °C" }
                 elm.pid("04")?.let { (a, _) -> live["Carico motore"] = "${a * 100 / 255} %" }
-                elm.pid("42")?.let { (a, b) -> live["Tensione"] = "%.1f V".format((a * 256 + b) / 1000.0) }
+                val volts = elm.pid("42")?.let { (a, b) -> (a * 256 + b) / 1000.0 } ?: elm.adapterVoltage()
+                volts?.let { live["Tensione"] = "%.1f V".format(it) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

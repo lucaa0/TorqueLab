@@ -19,3 +19,17 @@ Istruzioni in [RAPPORTO_OBD.md](RAPPORTO_OBD.md).
 
 PATS e odometro reali richiedono ancora implementazione e validazione sui moduli
 corretti. Non sono stati verificati su telefono o auto.
+
+## Limiti fissi
+
+L'odometro è solo in lettura. L'app non modificherà mai il chilometraggio:
+alterarlo è illegale (frode in commercio), anche se presentato come correzione.
+
+## Adattatore: da verificare prima di proseguire
+
+Ipotesi da confermare con il rapporto OBD reale di ciascuna auto:
+- Puma 1998: probabile protocollo J1850 PWM (Ford EEC-V). Molti ELM327
+  economici/cloni non lo supportano; in quel caso la diagnosi generica fallisce.
+- Fiesta 2010: diagnosi generica su CAN standard. Quadro strumenti e PATS
+  probabilmente su MS-CAN, che richiede un adattatore con commutatore HS/MS-CAN.
+Il campo «protocollo dichiarato» (ATDP/ATDPN) nel rapporto aiuta a chiarirlo.

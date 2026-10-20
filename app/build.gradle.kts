@@ -52,4 +52,6 @@ dependencies {
 
     // SQLite incluso nell'app (driver bundled): FTS5 e JSON indipendenti dalla versione Android
     implementation("androidx.sqlite:sqlite-bundled:2.5.0")
+
+    testImplementation("junit:junit:4.13.2")
 }

@@ -82,33 +82,47 @@ class Elm327 {
     }
 
     /** Codici di guasto: mode 03 (memorizzati) o 07 (in attesa). */
-    suspend fun readDtcs(pending: Boolean): List<String> {
-        val reply = if (pending) "47" else "43"
-        val lines = send(if (pending) "07" else "03", 6000)
-            .map { it.replace(Regex("^\\d+:"), "").replace(" ", "") }
-            // righe di sola lunghezza (es. "014") nelle risposte multi-frame CAN
-            .filter { !(it.length == 3 && it.all { c -> c.isDigit() }) }
-        if (lines.isEmpty() || !lines[0].startsWith(reply)) return emptyList()
-        var data = lines.mapIndexed { n, l -> if (n > 0 && l.startsWith(reply)) l.drop(2) else l }
-            .joinToString("").drop(2)
-        // shortcut: su CAN il primo byte è il numero di codici; euristica sulla lunghezza, da verificare su auto reali
-        if (data.length % 4 == 2) data = data.drop(2)
-        return data.chunked(4).filter { it.length == 4 && it != "0000" }.map { decodeDtc(it) }
-    }
+    suspend fun readDtcs(pending: Boolean): List<String> =
+        parseDtcs(send(if (pending) "07" else "03", 6000), pending)
 
     /** Valore di un PID mode 01 (byte A, B) o null se non supportato. */
-    suspend fun pid(pid: String): Pair<Int, Int>? {
-        val line = send("01$pid", 2500).joinToString("").replace(" ", "")
-        val at = line.indexOf("41$pid")
-        if (at < 0) return null
-        val d = line.substring(at + 4)
-        val a = d.take(2).toIntOrNull(16) ?: return null
-        return a to (d.drop(2).take(2).toIntOrNull(16) ?: 0)
-    }
+    suspend fun pid(pid: String): Pair<Int, Int>? = parsePid(send("01$pid", 2500), pid)
+
+    /** Tensione misurata dall'adattatore (ATRV): funziona anche se l'auto non supporta il PID 42. */
+    // keepErrors: un "?" da un clone senza ATRV non deve chiudere il collegamento.
+    suspend fun adapterVoltage(): Double? =
+        parseVoltage(lock.withLock { exchange("ATRV", 2000, keepErrors = true) })
 
     companion object {
         private val SPP: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         private val ERRORS = setOf("NO DATA", "UNABLE TO CONNECT", "BUS INIT: ERROR", "CAN ERROR", "BUS ERROR", "?", "STOPPED")
+
+        fun parseDtcs(raw: List<String>, pending: Boolean): List<String> {
+            val reply = if (pending) "47" else "43"
+            val lines = raw
+                .map { it.replace(Regex("^\\d+:"), "").replace(" ", "") }
+                // righe di sola lunghezza (es. "014", "00A": esadecimale) nelle risposte multi-frame CAN
+                .filter { !(it.length == 3 && it.all { c -> c.isDigit() || c in 'A'..'F' }) }
+            if (lines.isEmpty() || !lines[0].startsWith(reply)) return emptyList()
+            var data = lines.mapIndexed { n, l -> if (n > 0 && l.startsWith(reply)) l.drop(2) else l }
+                .joinToString("").drop(2)
+            // shortcut: su CAN il primo byte è il numero di codici; euristica sulla lunghezza, da verificare su auto reali
+            if (data.length % 4 == 2) data = data.drop(2)
+            return data.chunked(4).filter { it.length == 4 && it != "0000" }.map { decodeDtc(it) }
+        }
+
+        fun parsePid(raw: List<String>, pid: String): Pair<Int, Int>? {
+            val line = raw.joinToString("").replace(" ", "")
+            val at = line.indexOf("41$pid")
+            if (at < 0) return null
+            val d = line.substring(at + 4)
+            val a = d.take(2).toIntOrNull(16) ?: return null
+            return a to (d.drop(2).take(2).toIntOrNull(16) ?: 0)
+        }
+
+        /** "12.4V" → 12.4; null se la risposta non è una tensione. */
+        fun parseVoltage(raw: List<String>): Double? =
+            raw.firstNotNullOfOrNull { Regex("^(\\d{1,2}(?:\\.\\d)?)V$").find(it.trim())?.groupValues?.get(1)?.toDouble() }
 
         fun decodeDtc(hex4: String): String {
             val n = hex4[0].digitToInt(16)
